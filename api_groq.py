@@ -363,7 +363,7 @@ async def send_push_notification(token: str, title: str, body: str, briefing: st
             android=messaging.AndroidConfig(
                 priority="high",
                 notification=messaging.AndroidNotification(
-                    channel_id="default",
+                    channel_id="daily_briefing",
                     sound="default"
                 )
             )
