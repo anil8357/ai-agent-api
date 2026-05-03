@@ -10,4 +10,4 @@ chromadb
 openai
 python-multipart
 pydantic
-EOF
+EOFgroq
