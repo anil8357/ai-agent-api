@@ -1,0 +1,13 @@
+cat > requirements.txt << 'EOF'
+fastapi
+uvicorn
+langchain-ollama
+langgraph
+duckduckgo-search
+ddgs
+pymupdf
+chromadb
+openai
+python-multipart
+pydantic
+EOF
