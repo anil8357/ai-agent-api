@@ -8,6 +8,9 @@ import datetime
 import os
 import glob
 import httpx
+import json
+import firebase_admin
+from firebase_admin import credentials, messaging
 
 app = FastAPI(
     title="AI Agent API — Groq Edition",
@@ -21,6 +24,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def init_firebase():
+    if firebase_admin._apps:
+        return
+
+    service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+
+    if not service_account_json:
+        raise RuntimeError("FIREBASE_SERVICE_ACCOUNT_JSON missing in Railway Variables")
+
+    cred_dict = json.loads(service_account_json)
+    cred = credentials.Certificate(cred_dict)
+
+    firebase_admin.initialize_app(cred)
 
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 GROQ_MODEL = "llama-3.1-8b-instant"
@@ -325,32 +342,45 @@ Questions should be specific, actionable and relevant to the context."""
 
 
 async def send_push_notification(token: str, title: str, body: str, briefing: str):
-    """Send FCM push notification"""
-    fcm_key = os.getenv("FCM_SERVER_KEY")
-    if not fcm_key or not token:
-        return
+    init_firebase()
+
+    if not token:
+        return {
+            "success": False,
+            "reason": "FCM token empty"
+        }
 
     try:
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                "https://fcm.googleapis.com/fcm/send",
-                headers={
-                    "Authorization": f"key={fcm_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "to": token,
-                    "notification": {
-                        "title": title,
-                        "body": body[:100]
-                    },
-                    "data": {
-                        "briefing": briefing[:500]
-                    }
-                }
+        message = messaging.Message(
+            token=token,
+            notification=messaging.Notification(
+                title=title,
+                body=body
+            ),
+            data={
+                "briefing": briefing[:500]
+            },
+            android=messaging.AndroidConfig(
+                priority="high",
+                notification=messaging.AndroidNotification(
+                    channel_id="default",
+                    sound="default"
+                )
             )
+        )
+
+        message_id = messaging.send(message)
+
+        return {
+            "success": True,
+            "message_id": message_id
+        }
+
     except Exception as e:
-        print(f"FCM error: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
 
 class TokenRequest(BaseModel):
     token: str
@@ -373,56 +403,33 @@ async def register_token(request: TokenRequest):
     save_token(request.token)
     return {"status": "registered"}
 
-@app.post("/test-push-direct")
-async def test_push_direct():
-    token = "fMV8IcfsQzS-jFx01b8zwP:APA91bHwtXBYSUGDY5PSvbsod1-E0UZ1XMingnNq5FDmhjihbwTHmKnGk1FaE2ZGFm2WdzRUW-YyHNdp50Cq3APgJ0oiC5dQTmB708Vm9MWQojelfRMEiV0"
+@app.post("/test-push")
+async def test_push():
+    tokens = get_tokens()
 
-    result = await send_push_notification_debug(
-        token=token,
-        title="Railway Test",
-        body="Notification from Railway backend",
-        briefing="Test briefing"
-    )
-
-    return result    
-async def send_push_notification_debug(token: str, title: str, body: str, briefing: str):
-    fcm_key = os.getenv("FCM_SERVER_KEY")
-
-    if not fcm_key:
+    if not tokens:
         return {
-            "success": False,
-            "reason": "FCM_SERVER_KEY missing in Railway Variables"
+            "status": "failed",
+            "reason": "No FCM tokens found. Call /register-token first."
         }
 
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            response = await client.post(
-                "https://fcm.googleapis.com/fcm/send",
-                headers={
-                    "Authorization": f"key={fcm_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "to": token,
-                    "priority": "high",
-                    "notification": {
-                        "title": title,
-                        "body": body
-                    },
-                    "data": {
-                        "briefing": briefing
-                    }
-                }
-            )
+    results = []
 
-            return {
-                "success": response.status_code == 200,
-                "status_code": response.status_code,
-                "response": response.text
-            }
+    for token in tokens:
+        result = await send_push_notification(
+            token=token,
+            title="Railway Test",
+            body="Notification from Railway backend",
+            briefing="Test briefing from Railway"
+        )
 
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }  
+        results.append({
+            "token_start": token[:20],
+            "result": result
+        })
+
+    return {
+        "status": "done",
+        "tokens_count": len(tokens),
+        "results": results
+    }
