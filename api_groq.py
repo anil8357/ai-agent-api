@@ -405,12 +405,6 @@ async def register_token(request: TokenRequest):
 
 @app.post("/test-push")
 async def test_push():
-    return {
-        "status": "test-push route is working"
-    }
-
-@app.post("/test-push")
-async def test_push():
     tokens = get_tokens()
 
     if not tokens:
