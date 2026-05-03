@@ -409,41 +409,33 @@ async def test_push():
         "status": "test-push route is working"
     }
 
-@app.get("/")
-async def root():
+@app.post("/test-push")
+async def test_push():
+    tokens = get_tokens()
+
+    if not tokens:
+        return {
+            "status": "failed",
+            "reason": "No FCM tokens found. Call /register-token first."
+        }
+
+    results = []
+
+    for token in tokens:
+        result = await send_push_notification(
+            token=token,
+            title="Railway Test",
+            body="Notification from Railway backend",
+            briefing="Test briefing from Railway"
+        )
+
+        results.append({
+            "token_start": token[:20],
+            "result": result
+        })
+
     return {
-        "status": "running",
-        "file": "api_groq.py",
-        "version": "fcm-test-v1"
+        "status": "done",
+        "tokens_count": len(tokens),
+        "results": results
     }
-
-# @app.post("/test-push")
-# async def test_push():
-#     tokens = get_tokens()
-
-#     if not tokens:
-#         return {
-#             "status": "failed",
-#             "reason": "No FCM tokens found. Call /register-token first."
-#         }
-
-#     results = []
-
-#     for token in tokens:
-#         result = await send_push_notification(
-#             token=token,
-#             title="Railway Test",
-#             body="Notification from Railway backend",
-#             briefing="Test briefing from Railway"
-#         )
-
-#         results.append({
-#             "token_start": token[:20],
-#             "result": result
-#         })
-
-#     return {
-#         "status": "done",
-#         "tokens_count": len(tokens),
-#         "results": results
-#     }
