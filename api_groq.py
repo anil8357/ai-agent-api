@@ -405,31 +405,37 @@ async def register_token(request: TokenRequest):
 
 @app.post("/test-push")
 async def test_push():
-    tokens = get_tokens()
-
-    if not tokens:
-        return {
-            "status": "failed",
-            "reason": "No FCM tokens found. Call /register-token first."
-        }
-
-    results = []
-
-    for token in tokens:
-        result = await send_push_notification(
-            token=token,
-            title="Railway Test",
-            body="Notification from Railway backend",
-            briefing="Test briefing from Railway"
-        )
-
-        results.append({
-            "token_start": token[:20],
-            "result": result
-        })
-
     return {
-        "status": "done",
-        "tokens_count": len(tokens),
-        "results": results
+        "status": "test-push route is working"
     }
+
+# @app.post("/test-push")
+# async def test_push():
+#     tokens = get_tokens()
+
+#     if not tokens:
+#         return {
+#             "status": "failed",
+#             "reason": "No FCM tokens found. Call /register-token first."
+#         }
+
+#     results = []
+
+#     for token in tokens:
+#         result = await send_push_notification(
+#             token=token,
+#             title="Railway Test",
+#             body="Notification from Railway backend",
+#             briefing="Test briefing from Railway"
+#         )
+
+#         results.append({
+#             "token_start": token[:20],
+#             "result": result
+#         })
+
+#     return {
+#         "status": "done",
+#         "tokens_count": len(tokens),
+#         "results": results
+#     }
