@@ -12,4 +12,3 @@ python-multipart
 pydantic
 groq
 langchain-community
-firebase-admin

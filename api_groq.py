@@ -8,9 +8,6 @@ import datetime
 import os
 import glob
 import httpx
-import firebase_admin
-from firebase_admin import credentials, messaging
-import json
 
 app = FastAPI(
     title="AI Agent API — Groq Edition",
@@ -268,10 +265,11 @@ async def get_briefing():
     # Send push to all registered tokens
     tokens = get_tokens()
     for token in tokens:
-        send_push_notification(
+        await send_push_notification(
             token=token,
-            title=f"Daily Briefing — {date}",
-            body="Your AI + Android briefing is ready. Tap to read."
+            title=f"🤖 Daily Briefing — {date}",
+            body="Your AI + Android briefing is ready. Tap to read.",
+            briefing=briefing[:500]
         )
     
     return BriefingResponse(
@@ -339,27 +337,31 @@ Questions should be specific, actionable and relevant to the context."""
     )
 
 
-# Initialize Firebase Admin SDK
-def init_firebase():
-    if not firebase_admin._apps:
-        service_account = os.getenv("FIREBASE_SERVICE_ACCOUNT")
-        if service_account:
-            cred = credentials.Certificate(json.loads(service_account))
-            firebase_admin.initialize_app(cred)
+async def send_push_notification(token: str, title: str, body: str, briefing: str):
+    """Send FCM push notification"""
+    fcm_key = os.getenv("FCM_SERVER_KEY")
+    if not fcm_key or not token:
+        return
 
-
-def send_push_notification(token: str, title: str, body: str):
     try:
-        init_firebase()
-        message = messaging.Message(
-            notification=messaging.Notification(
-                title=title,
-                body=body
-            ),
-            token=token,
-        )
-        response = messaging.send(message)
-        print(f"Push sent: {response}")
+        async with httpx.AsyncClient() as client:
+            await client.post(
+                "https://fcm.googleapis.com/fcm/send",
+                headers={
+                    "Authorization": f"key={fcm_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "to": token,
+                    "notification": {
+                        "title": title,
+                        "body": body[:100]
+                    },
+                    "data": {
+                        "briefing": briefing[:500]
+                    }
+                }
+            )
     except Exception as e:
         print(f"FCM error: {e}")
 
@@ -367,22 +369,20 @@ class TokenRequest(BaseModel):
     token: str
     user_id: Optional[str] = "default"
 
+# Simple file-based token storage
 def save_token(token: str):
-    # Avoid duplicates
-    tokens = get_tokens()
-    if token not in tokens:
-        with open("fcm_tokens.txt", "a") as f:
-            f.write(token + "\n")
+    with open("fcm_tokens.txt", "a") as f:
+        f.write(token + "\n")
 
 def get_tokens() -> list:
     try:
         with open("fcm_tokens.txt", "r") as f:
-            return [t for t in f.read().strip().split("\n") if t]
+            return list(set(f.read().strip().split("\n")))
     except:
         return []
 
 @app.post("/register-token")
 async def register_token(request: TokenRequest):
     save_token(request.token)
-    return {"status": "registered", "message": "Token saved successfully"}
+    return {"status": "registered"}
 
