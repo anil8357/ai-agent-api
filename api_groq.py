@@ -8,6 +8,9 @@ import datetime
 import os
 import glob
 import httpx
+import firebase_admin
+from firebase_admin import credentials, messaging
+import json
 
 app = FastAPI(
     title="AI Agent API — Groq Edition",
@@ -265,11 +268,10 @@ async def get_briefing():
     # Send push to all registered tokens
     tokens = get_tokens()
     for token in tokens:
-        await send_push_notification(
+        send_push_notification(
             token=token,
-            title=f"🤖 Daily Briefing — {date}",
-            body="Your AI + Android briefing is ready. Tap to read.",
-            briefing=briefing[:500]
+            title=f"Daily Briefing — {date}",
+            body="Your AI + Android briefing is ready. Tap to read."
         )
     
     return BriefingResponse(
@@ -337,31 +339,27 @@ Questions should be specific, actionable and relevant to the context."""
     )
 
 
-async def send_push_notification(token: str, title: str, body: str, briefing: str):
-    """Send FCM push notification"""
-    fcm_key = os.getenv("FCM_SERVER_KEY")
-    if not fcm_key or not token:
-        return
+# Initialize Firebase Admin SDK
+def init_firebase():
+    if not firebase_admin._apps:
+        service_account = os.getenv("FIREBASE_SERVICE_ACCOUNT")
+        if service_account:
+            cred = credentials.Certificate(json.loads(service_account))
+            firebase_admin.initialize_app(cred)
 
+
+def send_push_notification(token: str, title: str, body: str):
     try:
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                "https://fcm.googleapis.com/fcm/send",
-                headers={
-                    "Authorization": f"key={fcm_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "to": token,
-                    "notification": {
-                        "title": title,
-                        "body": body[:100]
-                    },
-                    "data": {
-                        "briefing": briefing[:500]
-                    }
-                }
-            )
+        init_firebase()
+        message = messaging.Message(
+            notification=messaging.Notification(
+                title=title,
+                body=body
+            ),
+            token=token,
+        )
+        response = messaging.send(message)
+        print(f"Push sent: {response}")
     except Exception as e:
         print(f"FCM error: {e}")
 
