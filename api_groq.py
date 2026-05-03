@@ -373,29 +373,56 @@ async def register_token(request: TokenRequest):
     save_token(request.token)
     return {"status": "registered"}
 
-@app.post("/test-push")
-async def test_push():
-    tokens = get_tokens()
+@app.post("/test-push-direct")
+async def test_push_direct():
+    token = "fMV8IcfsQzS-jFx01b8zwP:APA91bHwtXBYSUGDY5PSvbsod1-E0UZ1XMingnNq5FDmhjihbwTHmKnGk1FaE2ZGFm2WdzRUW-YyHNdp50Cq3APgJ0oiC5dQTmB708Vm9MWQojelfRMEiV0"
 
-    if not tokens:
+    result = await send_push_notification_debug(
+        token=token,
+        title="Railway Test",
+        body="Notification from Railway backend",
+        briefing="Test briefing"
+    )
+
+    return result    
+async def send_push_notification_debug(token: str, title: str, body: str, briefing: str):
+    fcm_key = os.getenv("FCM_SERVER_KEY")
+
+    if not fcm_key:
         return {
-            "status": "failed",
-            "reason": "No tokens saved. Call /register-token first."
+            "success": False,
+            "reason": "FCM_SERVER_KEY missing in Railway Variables"
         }
 
-    results = []
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            response = await client.post(
+                "https://fcm.googleapis.com/fcm/send",
+                headers={
+                    "Authorization": f"key={fcm_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "to": token,
+                    "priority": "high",
+                    "notification": {
+                        "title": title,
+                        "body": body
+                    },
+                    "data": {
+                        "briefing": briefing
+                    }
+                }
+            )
 
-    for token in tokens:
-        result = await send_push_notification_debug(
-            token=token,
-            title="Railway Test",
-            body="Firebase notification test from Railway",
-            briefing="Test briefing from backend"
-        )
-        results.append(result)
+            return {
+                "success": response.status_code == 200,
+                "status_code": response.status_code,
+                "response": response.text
+            }
 
-    return {
-        "status": "done",
-        "tokens_count": len(tokens),
-        "results": results
-    }        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e)
+        }  
