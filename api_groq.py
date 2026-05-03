@@ -167,3 +167,43 @@ async def list_reports():
         "reports": [{"filename": f, "size": os.path.getsize(f)} for f in files],
         "total": len(files)
     }
+
+class BriefingResponse(BaseModel):
+    briefing: str
+    model: str
+    timestamp: str
+    date: str
+
+@app.post("/assistant", response_model=ChatResponse)
+async def learning_assistant(request: ChatRequest):
+    """Personal AI learning assistant with Anil's context"""
+    system = """You are Anil Kumar's personal AI learning assistant and career advisor.
+Anil is a 7-year Android developer with expertise in Kotlin, MVVM, payment gateways, NFC, and OpenCV.
+He recently completed an 8-week AI Engineering roadmap and built:
+LLM APIs, RAG pipelines, AI agents, LangGraph, CrewAI, FastAPI, Streamlit, deployed on Railway.
+His goal is to transition to an AI Engineer role in India.
+Give specific, personalized advice always referencing his actual background.
+Be concise — this is a mobile app, keep responses under 200 words."""
+
+    reply = groq_chat([
+        {"role": "system", "content": system},
+        {"role": "user", "content": request.message}
+    ])
+    return ChatResponse(
+        message=request.message,
+        reply=reply,
+        model=GROQ_MODEL,
+        timestamp=datetime.datetime.now().isoformat()
+    )
+
+@app.get("/briefing", response_model=BriefingResponse)
+async def get_briefing():
+    """Get today's personalized AI + Android briefing"""
+    topic = f"Android development AI engineering news India {datetime.datetime.now().strftime('%B %Y')}"
+    briefing = run_research_pipeline(topic)
+    return BriefingResponse(
+        briefing=briefing,
+        model=GROQ_MODEL,
+        timestamp=datetime.datetime.now().isoformat(),
+        date=datetime.datetime.now().strftime("%A, %B %d, %Y")
+    )
