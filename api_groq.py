@@ -273,3 +273,51 @@ async def list_reports():
         "reports": [{"filename": f, "size": os.path.getsize(f)} for f in files],
         "total": len(files)
     }
+
+class FollowUpsResponse(BaseModel):
+    questions: list[str]
+    timestamp: str
+
+@app.post("/followups", response_model=FollowUpsResponse)
+async def get_follow_ups(request: ChatRequest):
+    """Generate contextual follow-up questions based on conversation"""
+    reply = groq_chat([
+        {
+            "role": "system",
+            "content": """Generate exactly 3 short follow-up questions based on the conversation.
+Return ONLY a JSON array of 3 strings. No explanation, no markdown, just the JSON array.
+Example: ["Question 1?", "Question 2?", "Question 3?"]
+Questions should be specific, actionable and relevant to the context."""
+        },
+        {
+            "role": "user",
+            "content": f"Conversation:\n{request.message}\n\nGenerate 3 follow-up questions."
+        }
+    ], max_tokens=200)
+
+    # Parse JSON array from response
+    import json
+    import re
+    try:
+        # Extract JSON array from response
+        match = re.search(r'\[.*?\]', reply, re.DOTALL)
+        if match:
+            questions = json.loads(match.group())
+            questions = [q for q in questions if isinstance(q, str)][:3]
+        else:
+            questions = []
+    except:
+        questions = []
+
+    # Fallback if parsing fails
+    if not questions:
+        questions = [
+            "Can you explain this in more detail?",
+            "What should I do first?",
+            "How does this apply to my background?"
+        ]
+
+    return FollowUpsResponse(
+        questions=questions,
+        timestamp=datetime.datetime.now().isoformat()
+    )
