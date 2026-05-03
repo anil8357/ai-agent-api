@@ -373,4 +373,29 @@ async def register_token(request: TokenRequest):
     save_token(request.token)
     return {"status": "registered"}
 
-        
+@app.post("/test-push")
+async def test_push():
+    tokens = get_tokens()
+
+    if not tokens:
+        return {
+            "status": "failed",
+            "reason": "No tokens saved. Call /register-token first."
+        }
+
+    results = []
+
+    for token in tokens:
+        result = await send_push_notification_debug(
+            token=token,
+            title="Railway Test",
+            body="Firebase notification test from Railway",
+            briefing="Test briefing from backend"
+        )
+        results.append(result)
+
+    return {
+        "status": "done",
+        "tokens_count": len(tokens),
+        "results": results
+    }        
