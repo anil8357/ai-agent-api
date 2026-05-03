@@ -21,11 +21,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Groq client — reads GROQ_API_KEY from environment
 groq_client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-GROQ_MODEL = "llama-3.1-8b-instant"  # free, very fast
+GROQ_MODEL = "llama-3.1-8b-instant"
 
-# ── Request/Response models ────────────────────────────────
 class ResearchRequest(BaseModel):
     topic: str
     session_id: Optional[str] = "default"
@@ -46,7 +44,12 @@ class ChatResponse(BaseModel):
     model: str
     timestamp: str
 
-# ── Helper functions ───────────────────────────────────────
+class BriefingResponse(BaseModel):
+    briefing: str
+    model: str
+    timestamp: str
+    date: str
+
 def groq_chat(messages: list, max_tokens: int = 2048) -> str:
     response = groq_client.chat.completions.create(
         model=GROQ_MODEL,
@@ -58,76 +61,148 @@ def groq_chat(messages: list, max_tokens: int = 2048) -> str:
 def search_web(query: str) -> str:
     try:
         with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=4))
+            results = list(ddgs.text(query, max_results=5))
             if not results:
                 return "No results found"
             return "\n\n".join([
-                f"{r['title']}: {r['body'][:300]}"
+                f"TITLE: {r['title']}\nURL: {r['href']}\nSUMMARY: {r['body'][:300]}"
                 for r in results
             ])
     except Exception as e:
         return f"Search failed: {e}"
 
-# ── Research pipeline ──────────────────────────────────────
 def run_research_pipeline(topic: str) -> str:
-    # Step 1: Search
     web_results = search_web(topic)
-    tech_results = search_web(f"{topic} technical 2026")
+    tech_results = search_web(f"{topic} tutorial learn resources")
 
-    # Step 2: Write report
     report = groq_chat([
         {
             "role": "system",
-            "content": "You are a technical writer. Write comprehensive markdown reports."
+            "content": "You are a technical writer creating a daily briefing for an Android developer transitioning to AI Engineering. Always include real URLs from the research data provided."
         },
         {
             "role": "user",
-            "content": f"""Write a markdown report on: {topic}
+            "content": f"""Write a detailed daily briefing on: {topic}
 
 Research data:
 {web_results}
 
-Technical data:
+Technical/Learning data:
 {tech_results}
 
-Include: # Title, ## Overview, ## Key Findings, ## Technical Details, ## Conclusion
-*Generated: {datetime.datetime.now().strftime('%B %d, %Y')}*"""
+Write in this EXACT format. Use real URLs from the research data above:
+
+# Daily Briefing — {datetime.datetime.now().strftime('%B %d, %Y')}
+
+## 📱 Android News
+### [First article title from research]
+Summary: 2-3 sentences about what this means for Android developers.
+Read more: [real URL from research data]
+
+### [Second article title from research]
+Summary: 2-3 sentences of insight.
+Read more: [real URL from research data]
+
+## 🧠 AI Engineering
+### [First AI article title from research]
+Summary: 2-3 sentences relevant to LangGraph, agents, or LLMs.
+Read more: [real URL from research data]
+
+### [Second AI article title from research]
+Summary: 2-3 sentences of insight.
+Read more: [real URL from research data]
+
+## 💼 Jobs & Salary
+### Android + AI Engineer roles in India
+Summary: Current salary ranges, companies hiring, skills in demand based on research.
+Read more: [real URL from research data]
+
+## 📚 Learn Today
+### Recommended resource
+Summary: One specific tutorial or resource to learn today based on the research.
+Read more: [real URL from research data]
+
+IMPORTANT: Only use URLs that appear in the research data above. Do not invent URLs."""
         }
-    ])
+    ], max_tokens=3000)
 
-    # Step 3: Review
-    review = groq_chat([
-        {
-            "role": "system",
-            "content": "You are a strict editor. Reply APPROVED or NEEDS REVISION: [issues]"
-        },
-        {
-            "role": "user",
-            "content": f"Review this report:\n{report}"
-        }
-    ])
-
-    # Step 4: Revise if needed
-    if "APPROVED" not in review.upper():
-        report = groq_chat([
-            {
-                "role": "system",
-                "content": "You are a technical writer. Improve the report based on feedback."
-            },
-            {
-                "role": "user",
-                "content": f"Improve this report:\n{report}\n\nFeedback:\n{review}"
-            }
-        ])
-
-    # Save to file
     filename = f"groq_report_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.md"
     with open(filename, "w") as f:
         f.write(report)
 
     return report
 
-# ── Endpoints ──────────────────────────────────────────────
+def run_briefing_pipeline() -> str:
+    today = datetime.datetime.now().strftime('%B %Y')
+
+    android_results = search_web(f"Android development news {today}")
+    ai_results = search_web(f"AI engineering LLM agents news {today}")
+    jobs_results = search_web(f"Android AI engineer jobs India salary {today}")
+    learn_results = search_web("LangGraph CrewAI FastAPI tutorial 2026")
+
+    all_results = f"""
+=== ANDROID NEWS ===
+{android_results}
+
+=== AI ENGINEERING NEWS ===
+{ai_results}
+
+=== JOBS & SALARY ===
+{jobs_results}
+
+=== LEARNING RESOURCES ===
+{learn_results}
+"""
+
+    report = groq_chat([
+        {
+            "role": "system",
+            "content": "You are a technical writer creating a daily briefing for Anil Kumar, an Android developer transitioning to AI Engineering. Always include real URLs from the research data."
+        },
+        {
+            "role": "user",
+            "content": f"""Write a personalized daily briefing using this research data:
+
+{all_results}
+
+Write in this EXACT format using real URLs from the data above:
+
+# Daily Briefing — {datetime.datetime.now().strftime('%A, %B %d, %Y')}
+
+## 📱 Android News
+### [Title from Android research]
+Summary: What this means for an Android developer like Anil.
+Read more: [real URL from Android research]
+
+### [Second title from Android research]
+Summary: Key insight for Android development.
+Read more: [real URL from Android research]
+
+## 🧠 AI Engineering
+### [Title from AI research]
+Summary: How this relates to LangGraph, agents, RAG, or LLMs Anil has built.
+Read more: [real URL from AI research]
+
+### [Second title from AI research]
+Summary: Key insight for AI engineering.
+Read more: [real URL from AI research]
+
+## 💼 Jobs & Salary in India
+### Android + AI Engineer opportunities
+Summary: Specific salary ranges and companies hiring for Android+AI hybrid roles in India.
+Read more: [real URL from jobs research]
+
+## 📚 Learn Today
+### [Specific tutorial or resource title]
+Summary: One concrete thing Anil should learn or practice today based on his LangGraph/CrewAI background.
+Read more: [real URL from learning research]
+
+CRITICAL: Only use URLs that actually appear in the research data. Never invent URLs."""
+        }
+    ], max_tokens=3000)
+
+    return report
+
 @app.get("/health")
 async def health():
     return {
@@ -160,23 +235,8 @@ async def chat(request: ChatRequest):
         timestamp=datetime.datetime.now().isoformat()
     )
 
-@app.get("/reports")
-async def list_reports():
-    files = sorted(glob.glob("*.md"), reverse=True)
-    return {
-        "reports": [{"filename": f, "size": os.path.getsize(f)} for f in files],
-        "total": len(files)
-    }
-
-class BriefingResponse(BaseModel):
-    briefing: str
-    model: str
-    timestamp: str
-    date: str
-
 @app.post("/assistant", response_model=ChatResponse)
 async def learning_assistant(request: ChatRequest):
-    """Personal AI learning assistant with Anil's context"""
     system = """You are Anil Kumar's personal AI learning assistant and career advisor.
 Anil is a 7-year Android developer with expertise in Kotlin, MVVM, payment gateways, NFC, and OpenCV.
 He recently completed an 8-week AI Engineering roadmap and built:
@@ -198,12 +258,18 @@ Be concise — this is a mobile app, keep responses under 200 words."""
 
 @app.get("/briefing", response_model=BriefingResponse)
 async def get_briefing():
-    """Get today's personalized AI + Android briefing"""
-    topic = f"Android development AI engineering news India {datetime.datetime.now().strftime('%B %Y')}"
-    briefing = run_research_pipeline(topic)
+    briefing = run_briefing_pipeline()
     return BriefingResponse(
         briefing=briefing,
         model=GROQ_MODEL,
         timestamp=datetime.datetime.now().isoformat(),
         date=datetime.datetime.now().strftime("%A, %B %d, %Y")
     )
+
+@app.get("/reports")
+async def list_reports():
+    files = sorted(glob.glob("*.md"), reverse=True)
+    return {
+        "reports": [{"filename": f, "size": os.path.getsize(f)} for f in files],
+        "total": len(files)
+    }
