@@ -409,6 +409,14 @@ async def test_push():
         "status": "test-push route is working"
     }
 
+@app.get("/")
+async def root():
+    return {
+        "status": "running",
+        "file": "api_groq.py",
+        "version": "fcm-test-v1"
+    }
+
 # @app.post("/test-push")
 # async def test_push():
 #     tokens = get_tokens()
