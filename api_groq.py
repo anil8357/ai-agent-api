@@ -403,6 +403,49 @@ async def register_token(request: TokenRequest):
     save_token(request.token)
     return {"status": "registered"}
 
+def save_token(token: str):
+    token = token.strip()
+    if not token:
+        return
+
+    tokens = set(get_tokens())
+    tokens.add(token)
+
+    with open("fcm_tokens.txt", "w") as f:
+        for t in tokens:
+            f.write(t + "\n")
+
+
+def get_tokens() -> list:
+    try:
+        with open("fcm_tokens.txt", "r") as f:
+            return [
+                line.strip()
+                for line in f.readlines()
+                if line.strip()
+            ]
+    except FileNotFoundError:
+        return []
+
+
+def remove_token(token: str):
+    tokens = set(get_tokens())
+    tokens.discard(token)
+
+    with open("fcm_tokens.txt", "w") as f:
+        for t in tokens:
+            f.write(t + "\n")
+
+
+@app.post("/register-token")
+async def register_token(request: TokenRequest):
+    save_token(request.token)
+    return {
+        "status": "registered",
+        "token_start": request.token[:20]
+    }
+
+
 @app.post("/test-push")
 async def test_push():
     tokens = get_tokens()
@@ -414,6 +457,7 @@ async def test_push():
         }
 
     results = []
+    removed_tokens = []
 
     for token in tokens:
         result = await send_push_notification(
@@ -423,13 +467,29 @@ async def test_push():
             briefing="Test briefing from Railway"
         )
 
+        error = str(result.get("error", ""))
+
+        should_remove = (
+            "Requested entity was not found" in error
+            or "registration-token-not-registered" in error
+            or "The registration token is not a valid FCM registration token" in error
+            or "SenderId mismatch" in error
+        )
+
+        if should_remove:
+            remove_token(token)
+            removed_tokens.append(token[:20])
+
         results.append({
             "token_start": token[:20],
+            "removed": should_remove,
             "result": result
         })
 
     return {
         "status": "done",
         "tokens_count": len(tokens),
+        "removed_tokens_count": len(removed_tokens),
+        "removed_tokens": removed_tokens,
         "results": results
     }
