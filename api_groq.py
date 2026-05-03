@@ -286,6 +286,7 @@ async def list_reports():
         "reports": [{"filename": f, "size": os.path.getsize(f)} for f in files],
         "total": len(files)
     }
+    
 
 class FollowUpsResponse(BaseModel):
     questions: list[str]
@@ -368,20 +369,22 @@ class TokenRequest(BaseModel):
     token: str
     user_id: Optional[str] = "default"
 
-# Simple file-based token storage
 def save_token(token: str):
-    with open("fcm_tokens.txt", "a") as f:
-        f.write(token + "\n")
+    # Avoid duplicates
+    tokens = get_tokens()
+    if token not in tokens:
+        with open("fcm_tokens.txt", "a") as f:
+            f.write(token + "\n")
 
 def get_tokens() -> list:
     try:
         with open("fcm_tokens.txt", "r") as f:
-            return list(set(f.read().strip().split("\n")))
+            return [t for t in f.read().strip().split("\n") if t]
     except:
         return []
 
 @app.post("/register-token")
 async def register_token(request: TokenRequest):
     save_token(request.token)
-    return {"status": "registered"}
+    return {"status": "registered", "message": "Token saved successfully"}
 
